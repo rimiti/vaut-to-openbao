@@ -1,18 +1,28 @@
 {
-  "name": "vault-to-openbao",
+  "name": "@rimiti/vault-to-openbao",
   "version": "1.0.0",
-  "description": "Migration script from HashiCorp Vault to OpenBao",
+  "description": "Migrate secrets from HashiCorp Vault to OpenBao",
+  "license": "MIT",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "vault-to-openbao": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "migrate": "ts-node src/index.ts",
-    "dev": "ts-node src/index.ts"
+    "start": "node dist/cli.js",
+    "dev": "ts-node src/cli.ts",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "axios": "1.7.9",
     "axios-retry": "4.5.0",
     "chalk": "4.1.2",
+    "commander": "12.1.0",
     "dotenv": "16.4.7"
   },
   "devDependencies": {
