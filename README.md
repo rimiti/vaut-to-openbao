@@ -1,6 +1,6 @@
-# vault-to-openbao
+# @rimiti/vault-to-openbao
 
-Migration script for copying secrets from HashiCorp Vault to OpenBao, designed to run against a Kubernetes cluster.
+Migrate secrets from HashiCorp Vault to OpenBao, designed to run against a Kubernetes cluster.
 
 ## Prerequisites
 
@@ -10,50 +10,102 @@ Migration script for copying secrets from HashiCorp Vault to OpenBao, designed t
 
 ## Installation
 
+### Global (CLI usage)
+
 ```bash
-yarn
+npm install -g @rimiti/vault-to-openbao
 ```
 
-## Configuration
+### Local (programmatic usage)
 
-Copy the example file and fill in your values:
+```bash
+yarn add @rimiti/vault-to-openbao
+```
+
+## CLI
+
+### Configuration
+
+All options can be passed as CLI flags or environment variables. CLI flags take precedence.
+
+| Flag                | Env var           | Description                                        | Default                  |
+| ------------------- | ----------------- | -------------------------------------------------- | ------------------------ |
+| `--vault-addr`      | `VAULT_ADDR`      | URL of the source Vault instance                   | —                        |
+| `--vault-token`     | `VAULT_TOKEN`     | Vault authentication token                         | —                        |
+| `--openbao-addr`    | `OPENBAO_ADDR`    | URL of the destination OpenBao instance            | —                        |
+| `--openbao-token`   | `OPENBAO_TOKEN`   | OpenBao authentication token                       | —                        |
+| `--dry-run`         | `DRY_RUN=true`    | Simulate migration without writing                 | `false`                  |
+| `--skip-tls-verify` | `SKIP_TLS_VERIFY=true` | Disable TLS certificate verification          | `false`                  |
+| `--skip-mounts`     | `SKIP_MOUNTS`     | Comma-separated list of mounts to skip             | `sys,identity,cubbyhole` |
+| `--concurrency`     | `CONCURRENCY`     | Number of secrets migrated in parallel             | `5`                      |
+| `-V, --version`     |                   | Display version                                    |                          |
+| `-h, --help`        |                   | Display help                                       |                          |
+
+### Usage
+
+Dry-run first (recommended):
+
+```bash
+vault-to-openbao \
+  --vault-addr https://vault.example.com \
+  --vault-token hvs.xxxx \
+  --openbao-addr https://openbao.example.com \
+  --openbao-token s.xxxx \
+  --dry-run
+```
+
+Real migration:
+
+```bash
+vault-to-openbao \
+  --vault-addr https://vault.example.com \
+  --vault-token hvs.xxxx \
+  --openbao-addr https://openbao.example.com \
+  --openbao-token s.xxxx
+```
+
+Using a `.env` file instead of flags:
 
 ```bash
 cp .env.example .env
+# edit .env, then:
+vault-to-openbao
 ```
 
-| Variable          | Description                                          | Default                  |
-| ----------------- | ---------------------------------------------------- | ------------------------ |
-| `VAULT_ADDR`      | URL of the source Vault instance                     | —                        |
-| `VAULT_TOKEN`     | Vault authentication token                           | —                        |
-| `OPENBAO_ADDR`    | URL of the destination OpenBao instance              | —                        |
-| `OPENBAO_TOKEN`   | OpenBao authentication token                         | —                        |
-| `DRY_RUN`         | If `true`, simulates the migration without writing   | `false`                  |
-| `SKIP_TLS_VERIFY` | If `true`, disables TLS certificate verification     | `false`                  |
-| `SKIP_MOUNTS`     | Comma-separated list of mounts to skip               | `sys,identity,cubbyhole` |
-| `CONCURRENCY`     | Number of secrets migrated in parallel               | `5`                      |
+## Programmatic API
 
-## Usage
+```ts
+import { migrate } from "@rimiti/vault-to-openbao";
 
-### Dry-run (recommended first)
+const stats = await migrate({
+  vault: {
+    addr: "https://vault.example.com",
+    token: "hvs.xxxx",
+  },
+  openbao: {
+    addr: "https://openbao.example.com",
+    token: "s.xxxx",
+  },
+  dryRun: false,
+  skipTlsVerify: false,
+  skipMounts: ["sys", "identity", "cubbyhole"],
+  concurrency: 5,
+});
 
-Simulates the full migration without writing anything to OpenBao:
-
-```bash
-DRY_RUN=true npm run migrate
+console.log(`Migrated ${stats.migratedSecrets} / ${stats.totalSecrets} secrets`);
 ```
 
-### Real migration
+### `migrate(config)` return value
 
-```bash
-npm run migrate
-```
-
-### Build then run
-
-```bash
-npm run build
-npm start
+```ts
+interface MigrationStats {
+  totalMounts: number;
+  skippedMounts: number;
+  totalSecrets: number;
+  migratedSecrets: number;
+  failedSecrets: number;
+  errors: Array<{ path: string; error: string }>;
+}
 ```
 
 ## How it works
@@ -77,10 +129,10 @@ Step 3/3 — Migrating secrets
 
 ### KV version handling
 
-| Version | Vault read                    | OpenBao write                 |
-| ------- | ----------------------------- | ----------------------------- |
-| KV v1   | `GET /v1/<mount>/<path>`      | `POST /v1/<mount>/<path>`     |
-| KV v2   | `GET /v1/<mount>/data/<path>` | `POST /v1/<mount>/data/<path>`|
+| Version | Vault read                    | OpenBao write                  |
+| ------- | ----------------------------- | ------------------------------ |
+| KV v1   | `GET /v1/<mount>/<path>`      | `POST /v1/<mount>/<path>`      |
+| KV v2   | `GET /v1/<mount>/data/<path>` | `POST /v1/<mount>/data/<path>` |
 
 The version is detected automatically from the mount options (`options.version`).
 
@@ -106,7 +158,7 @@ Migration Summary
   Secrets failed    : 0
 ```
 
-The process exits with code `1` if at least one secret failed to migrate.
+The CLI exits with code `1` if at least one secret failed to migrate.
 
 ## Required permissions
 
