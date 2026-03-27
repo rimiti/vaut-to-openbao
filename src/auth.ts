@@ -1,53 +1,10 @@
 import { AxiosInstance } from "axios";
 import { log } from "./logger";
 import { AuthMount, MigrationStats } from "./types";
+import { safeGet, safeList } from "./utils";
 
 // Built-in auth methods that cannot be disabled
 const BUILTIN_AUTH = new Set(["token"]);
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-async function safeList(
-  client: AxiosInstance,
-  path: string
-): Promise<string[]> {
-  try {
-    const res = await client.request({ method: "LIST", url: path });
-    return res.data.data?.keys ?? [];
-  } catch (err: unknown) {
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      "response" in err &&
-      (err as { response: { status: number } }).response?.status === 404
-    ) {
-      return [];
-    }
-    throw err;
-  }
-}
-
-async function safeGet(
-  client: AxiosInstance,
-  path: string
-): Promise<Record<string, unknown> | null> {
-  try {
-    const res = await client.get(path);
-    return res.data.data ?? res.data;
-  } catch (err: unknown) {
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      "response" in err &&
-      (err as { response: { status: number } }).response?.status === 404
-    ) {
-      return null;
-    }
-    throw err;
-  }
-}
 
 /** Migrate a list of named resources (roles, users, groups…) */
 async function migrateNamedResources(

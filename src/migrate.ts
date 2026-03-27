@@ -1,5 +1,7 @@
 import { migrateAuthMethods } from "./auth";
 import { createClient } from "./client";
+import { migrateIdentity } from "./identity";
+import { inventoryLeases } from "./leases";
 import { log } from "./logger";
 import { ensureMount, writeSecret } from "./openbao";
 import { migratePolicies } from "./policies";
@@ -78,42 +80,49 @@ export async function migrate(config: Config): Promise<MigrationStats> {
   );
 
   const stats: MigrationStats = {
-    totalMounts: 0,
-    skippedMounts: 0,
-    totalSecrets: 0,
-    migratedSecrets: 0,
-    failedSecrets: 0,
     totalPolicies: 0,
     migratedPolicies: 0,
     failedPolicies: 0,
     totalAuthMethods: 0,
     migratedAuthMethods: 0,
     failedAuthMethods: 0,
+    totalEntities: 0,
+    migratedEntities: 0,
+    failedEntities: 0,
+    totalGroups: 0,
+    migratedGroups: 0,
+    failedGroups: 0,
+    totalLeases: 0,
+    totalMounts: 0,
+    skippedMounts: 0,
+    totalSecrets: 0,
+    migratedSecrets: 0,
+    failedSecrets: 0,
     errors: [],
   };
 
-  // Step 1 — migrate policies
-  log.section("Step 1/5 — Migrating policies");
+  // Step 1 — policies
+  log.section("Step 1/7 — Migrating policies");
   await migratePolicies(
-    vaultClient,
-    openbaoClient,
-    config.skipPolicies,
-    config.dryRun,
-    stats
+    vaultClient, openbaoClient, config.skipPolicies, config.dryRun, stats
   );
 
-  // Step 2 — migrate auth methods
-  log.section("Step 2/5 — Migrating auth methods");
+  // Step 2 — auth methods
+  log.section("Step 2/7 — Migrating auth methods");
   await migrateAuthMethods(
-    vaultClient,
-    openbaoClient,
-    config.skipAuthMethods,
-    config.dryRun,
-    stats
+    vaultClient, openbaoClient, config.skipAuthMethods, config.dryRun, stats
   );
 
-  // Step 3 — discover KV mounts
-  log.section("Step 3/5 — Discovering KV mounts");
+  // Step 3 — identity: entities + groups
+  log.section("Step 3/7 — Migrating identity (entities & groups)");
+  await migrateIdentity(vaultClient, openbaoClient, config.dryRun, stats);
+
+  // Step 4 — lease inventory (informational, no writes)
+  log.section("Step 4/7 — Lease inventory");
+  await inventoryLeases(vaultClient, stats);
+
+  // Step 5 — discover KV mounts
+  log.section("Step 5/7 — Discovering KV mounts");
   const allMounts = await listMounts(vaultClient);
   stats.totalMounts = allMounts.length;
 
@@ -127,8 +136,8 @@ export async function migrate(config: Config): Promise<MigrationStats> {
     return stats;
   }
 
-  // Step 4 — enumerate all secrets
-  log.section("Step 4/5 — Enumerating secrets");
+  // Step 6 — enumerate secrets
+  log.section("Step 6/7 — Enumerating secrets");
   const allEntries: SecretEntry[] = [];
 
   for (const mount of mounts) {
@@ -136,14 +145,9 @@ export async function migrate(config: Config): Promise<MigrationStats> {
     log.info(`  Scanning ${mount.path}/ (KV v${kvVersion})`);
 
     try {
-      const entries = await listSecretsRecursive(
-        vaultClient,
-        mount,
-        kvVersion
-      );
+      const entries = await listSecretsRecursive(vaultClient, mount, kvVersion);
       log.info(`    → ${entries.length} secret(s) found`);
       allEntries.push(...entries);
-
       await ensureMount(openbaoClient, mount, kvVersion);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -155,8 +159,8 @@ export async function migrate(config: Config): Promise<MigrationStats> {
   stats.totalSecrets = allEntries.length;
   log.info(`\nTotal secrets to migrate: ${allEntries.length}`);
 
-  // Step 5 — migrate secrets
-  log.section("Step 5/5 — Migrating secrets");
+  // Step 7 — migrate secrets
+  log.section("Step 7/7 — Migrating secrets");
 
   const results = await runInBatches(
     allEntries,

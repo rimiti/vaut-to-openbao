@@ -98,6 +98,9 @@ const stats = await migrate({
 
 console.log(`Policies  : ${stats.migratedPolicies} / ${stats.totalPolicies}`);
 console.log(`Auth      : ${stats.migratedAuthMethods} / ${stats.totalAuthMethods}`);
+console.log(`Entities  : ${stats.migratedEntities} / ${stats.totalEntities}`);
+console.log(`Groups    : ${stats.migratedGroups} / ${stats.totalGroups}`);
+console.log(`Leases    : ${stats.totalLeases} active (inventory only)`);
 console.log(`Secrets   : ${stats.migratedSecrets} / ${stats.totalSecrets}`);
 ```
 
@@ -105,12 +108,6 @@ console.log(`Secrets   : ${stats.migratedSecrets} / ${stats.totalSecrets}`);
 
 ```ts
 interface MigrationStats {
-  // KV secrets
-  totalMounts: number;
-  skippedMounts: number;
-  totalSecrets: number;
-  migratedSecrets: number;
-  failedSecrets: number;
   // Policies
   totalPolicies: number;
   migratedPolicies: number;
@@ -119,6 +116,22 @@ interface MigrationStats {
   totalAuthMethods: number;
   migratedAuthMethods: number;
   failedAuthMethods: number;
+  // Identity — entities
+  totalEntities: number;
+  migratedEntities: number;
+  failedEntities: number;
+  // Identity — groups
+  totalGroups: number;
+  migratedGroups: number;
+  failedGroups: number;
+  // Leases (inventory only — not migrated)
+  totalLeases: number;
+  // KV secrets
+  totalMounts: number;
+  skippedMounts: number;
+  totalSecrets: number;
+  migratedSecrets: number;
+  failedSecrets: number;
   // All errors
   errors: Array<{ path: string; error: string }>;
 }
@@ -126,29 +139,41 @@ interface MigrationStats {
 
 ## How it works
 
-The migration runs in five steps:
+The migration runs in seven steps:
 
 ```
-Step 1/5 — Migrating policies
-  → Lists all ACL policies via /v1/sys/policies/acl
+Step 1/7 — Migrating policies
+  → Lists all ACL policies via LIST /v1/sys/policies/acl
   → Skips built-in policies (root, default)
   → Writes each policy to OpenBao
 
-Step 2/5 — Migrating auth methods
+Step 2/7 — Migrating auth methods
   → Lists all auth mounts via /v1/sys/auth
   → Skips built-in auth (token)
   → Enables each method in OpenBao, then migrates its config and roles/users
 
-Step 3/5 — Discovering KV mounts
+Step 3/7 — Migrating identity (entities & groups)
+  → Builds an accessor mapping (Vault auth accessor → OpenBao auth accessor)
+  → Creates all entities (upsert by name), resolves old→new entity ID mapping
+  → Creates entity aliases with remapped accessors and entity IDs
+  → Creates internal groups (two-pass: create without members, then update members)
+  → Creates group aliases for external groups with remapped accessors
+
+Step 4/7 — Lease inventory
+  → Lists all active leases recursively from /v1/sys/leases/lookup/
+  → Logs a summary grouped by prefix
+  → Does NOT migrate leases (they are runtime credentials tied to Vault)
+
+Step 5/7 — Discovering KV mounts
   → Queries /v1/sys/mounts on Vault
   → Filters mounts of type KV (v1 and v2)
   → Excludes system mounts (sys, identity, cubbyhole)
 
-Step 4/5 — Enumerating secrets
+Step 6/7 — Enumerating secrets
   → Recursively walks each mount using the LIST operation
   → Creates any missing mounts in OpenBao
 
-Step 5/5 — Migrating secrets
+Step 7/7 — Migrating secrets
   → Reads each secret from Vault
   → Writes it to OpenBao (in parallel batches)
 ```
@@ -193,10 +218,13 @@ Vault → OpenBao Migration
 ============================================================
 Migration Summary
 ============================================================
-  Policies migrated   : 2 / 2 (0 failed)
+  Policies            : 2 / 2 (0 failed)
   Auth methods        : 1 / 1 (0 failed)
+  Entities            : 5 / 5 (0 failed)
+  Groups              : 3 / 3 (0 failed)
+  Active leases       : 12 (inventory only — not migrated)
   KV mounts           : 3 discovered, 0 skipped
-  Secrets migrated    : 42 / 42 (0 failed)
+  Secrets             : 42 / 42 (0 failed)
 ```
 
 The CLI exits with code `1` if at least one item failed to migrate.
@@ -236,6 +264,16 @@ path "sys/auth" {
 path "auth/*" {
   capabilities = ["read", "list"]
 }
+
+# Identity
+path "identity/*" {
+  capabilities = ["read", "list"]
+}
+
+# Leases inventory
+path "sys/leases/lookup/*" {
+  capabilities = ["list", "sudo"]
+}
 ```
 
 ### OpenBao (destination) — minimal policy
@@ -270,5 +308,10 @@ path "sys/auth/*" {
 }
 path "auth/*" {
   capabilities = ["create", "update"]
+}
+
+# Identity
+path "identity/*" {
+  capabilities = ["create", "update", "read", "list"]
 }
 ```

@@ -96,10 +96,13 @@ async function run(): Promise<void> {
   const stats = await migrate(config);
 
   log.section("Migration Summary");
-  console.log(`  Policies migrated   : ${stats.migratedPolicies} / ${stats.totalPolicies} (${stats.failedPolicies} failed)`);
+  console.log(`  Policies            : ${stats.migratedPolicies} / ${stats.totalPolicies} (${stats.failedPolicies} failed)`);
   console.log(`  Auth methods        : ${stats.migratedAuthMethods} / ${stats.totalAuthMethods} (${stats.failedAuthMethods} failed)`);
+  console.log(`  Entities            : ${stats.migratedEntities} / ${stats.totalEntities} (${stats.failedEntities} failed)`);
+  console.log(`  Groups              : ${stats.migratedGroups} / ${stats.totalGroups} (${stats.failedGroups} failed)`);
+  console.log(`  Active leases       : ${stats.totalLeases} (inventory only — not migrated)`);
   console.log(`  KV mounts           : ${stats.totalMounts} discovered, ${stats.skippedMounts} skipped`);
-  console.log(`  Secrets migrated    : ${stats.migratedSecrets} / ${stats.totalSecrets} (${stats.failedSecrets} failed)`);
+  console.log(`  Secrets             : ${stats.migratedSecrets} / ${stats.totalSecrets} (${stats.failedSecrets} failed)`);
 
   if (stats.errors.length > 0) {
     log.section("Errors");

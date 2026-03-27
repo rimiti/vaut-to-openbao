@@ -37,12 +37,6 @@ export interface AuthMount {
 }
 
 export interface MigrationStats {
-  // KV secrets
-  totalMounts: number;
-  skippedMounts: number;
-  totalSecrets: number;
-  migratedSecrets: number;
-  failedSecrets: number;
   // Policies
   totalPolicies: number;
   migratedPolicies: number;
@@ -51,6 +45,22 @@ export interface MigrationStats {
   totalAuthMethods: number;
   migratedAuthMethods: number;
   failedAuthMethods: number;
+  // Identity — entities
+  totalEntities: number;
+  migratedEntities: number;
+  failedEntities: number;
+  // Identity — groups
+  totalGroups: number;
+  migratedGroups: number;
+  failedGroups: number;
+  // Leases (inventory only, not migrated)
+  totalLeases: number;
+  // KV secrets
+  totalMounts: number;
+  skippedMounts: number;
+  totalSecrets: number;
+  migratedSecrets: number;
+  failedSecrets: number;
   // All errors
   errors: Array<{ path: string; error: string }>;
 }
